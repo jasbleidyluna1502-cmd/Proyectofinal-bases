@@ -207,7 +207,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $horario = filter_var($_POST['id_horario'] ?? null, FILTER_VALIDATE_INT);
             $estado = $pdo->query("SELECT id_estado FROM estado WHERE ambito='cita' AND nombre='Programada'")->fetchColumn();
             if (!$afiliado || !$servicio || !$horario || !$estado) throw new RuntimeException('Seleccione afiliado, servicio y horario.');
-            $pdo->prepare('INSERT INTO cita (id_afiliado,id_servicio,id_horario,id_estado) VALUES (?,?,?,?)')->execute([$afiliado,$servicio,$horario,$estado]);
+            $pdo->beginTransaction();
+            try {
+                $stmtHorarioDisponible = $pdo->prepare("SELECT h.fecha,h.hora_inicio,s.nombre AS estado_horario,s.ambito FROM horario h JOIN estado s ON s.id_estado=h.id_estado WHERE h.id_horario=? FOR UPDATE OF h");
+                $stmtHorarioDisponible->execute([$horario]);
+                $datosHorario = $stmtHorarioDisponible->fetch();
+                if (!$datosHorario) throw new RuntimeException('El horario seleccionado ya no existe. Actualice la página y elija otro.');
+                if ($datosHorario['ambito'] !== 'horario' || $datosHorario['estado_horario'] !== 'Disponible') {
+                    throw new RuntimeException('Ese horario ya no está disponible. Actualice la página y elija otra hora.');
+                }
+                $zonaBogota = new DateTimeZone('America/Bogota');
+                $fechaHoraCita = new DateTimeImmutable($datosHorario['fecha'] . ' ' . $datosHorario['hora_inicio'], $zonaBogota);
+                if ($fechaHoraCita <= new DateTimeImmutable('now', $zonaBogota)) {
+                    throw new RuntimeException('No se pueden reservar citas en una fecha u hora que ya pasó. Actualice la página y elija otro horario.');
+                }
+                $pdo->prepare('INSERT INTO cita (id_afiliado,id_servicio,id_horario,id_estado) VALUES (?,?,?,?)')->execute([$afiliado,$servicio,$horario,$estado]);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                throw $e;
+            }
             $mensaje = 'Cita reservada. El valor se calculó automáticamente y el horario quedó ocupado.';
         } elseif ($accion === 'atender_cita') {
             $id = filter_var($_POST['id_cita'] ?? null, FILTER_VALIDATE_INT);
@@ -219,7 +238,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mensaje = 'Cita eliminada y horario liberado.';
         }
     } catch (Throwable $e) {
-        $error = $e instanceof PDOException ? 'No se guardó el cambio. Verifique que el documento no esté repetido y que los registros seleccionados existan.' : $e->getMessage();
+        $error = $e instanceof PDOException
+            ? (($accion ?? '') === 'crear_cita' ? 'No se reservó la cita: el horario dejó de estar disponible. Actualice la página y seleccione otra hora.' : 'No se guardó el cambio. Verifique que el documento no esté repetido y que los registros seleccionados existan.')
+            : $e->getMessage();
     }
 }
 $tipos = $pdo->query('SELECT id_tipo_doc,sigla FROM tipo_documento ORDER BY sigla')->fetchAll();
@@ -230,7 +251,7 @@ $especialidades = $pdo->query('SELECT id_especialidad,nombre FROM especialidad O
 $consultorios = $pdo->query("SELECT c.id_consultorio,c.nombre,c.ubicacion,c.capacidad,e.nombre AS estado FROM consultorio c JOIN estado e USING(id_estado) ORDER BY c.nombre")->fetchAll();
 $medicos = $pdo->query("SELECT m.id_medico,m.id_tipo_doc,m.num_documento,m.nombre1,m.nombre2,m.apellido1,m.apellido2,m.correo,m.telefono,m.id_especialidad,m.id_consultorio,t.sigla,e.nombre AS especialidad,COALESCE(c.nombre,'Sin asignar') AS consultorio FROM medico m JOIN tipo_documento t USING(id_tipo_doc) JOIN especialidad e USING(id_especialidad) LEFT JOIN consultorio c USING(id_consultorio) ORDER BY m.apellido1,m.nombre1")->fetchAll();
 $agendaHorarios = $pdo->query("SELECT h.id_horario,h.id_medico,h.fecha,h.hora_inicio,h.hora_fin,e.nombre AS estado,m.nombre1 || ' ' || m.apellido1 AS medico FROM horario h JOIN medico m USING(id_medico) JOIN estado e USING(id_estado) WHERE h.fecha >= CURRENT_DATE ORDER BY h.fecha,h.hora_inicio LIMIT 100")->fetchAll();
-$horarios = $pdo->query("SELECT h.id_horario,h.id_medico,h.fecha,h.hora_inicio,h.hora_fin,m.nombre1 || ' ' || m.apellido1 AS medico,e.nombre AS especialidad FROM horario h JOIN medico m USING(id_medico) JOIN especialidad e USING(id_especialidad) JOIN estado s USING(id_estado) WHERE s.ambito='horario' AND s.nombre='Disponible' AND h.fecha >= CURRENT_DATE ORDER BY h.fecha,h.hora_inicio")->fetchAll();
+$horarios = $pdo->query("SELECT h.id_horario,h.id_medico,h.fecha,h.hora_inicio,h.hora_fin,m.nombre1 || ' ' || m.apellido1 AS medico,e.nombre AS especialidad FROM horario h JOIN medico m USING(id_medico) JOIN especialidad e USING(id_especialidad) JOIN estado s USING(id_estado) WHERE s.ambito='horario' AND s.nombre='Disponible' AND (h.fecha + h.hora_inicio) > (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota') ORDER BY h.fecha,h.hora_inicio")->fetchAll();
 $medicosHorario = [];
 foreach ($horarios as $slot) $medicosHorario[$slot['id_medico']] = $slot['medico'] . ' · ' . $slot['especialidad'];
 $citas = $pdo->query("SELECT c.id_cita,a.nombre1 || ' ' || a.apellido1 AS afiliado,s.nombre AS servicio,h.fecha,h.hora_inicio,m.nombre1 || ' ' || m.apellido1 AS medico,c.valor_cobrado,e.nombre AS estado FROM cita c JOIN afiliado a USING(id_afiliado) JOIN servicio s USING(id_servicio) JOIN horario h USING(id_horario) JOIN medico m USING(id_medico) JOIN estado e ON e.id_estado = c.id_estado ORDER BY h.fecha,h.hora_inicio")->fetchAll();
@@ -243,6 +264,8 @@ $citas = $pdo->query("SELECT c.id_cita,a.nombre1 || ' ' || a.apellido1 AS afilia
 @media(max-width:680px){.shell{display:block}.sidebar{padding:12px;gap:10px;position:sticky;top:0;z-index:5}.brand{padding:0 5px}.brand-mark{width:34px;height:34px}.sidebar .nav-label,.side-note{display:none}.nav-list{display:flex;overflow:auto}.nav-link{justify-content:center;white-space:nowrap;padding:8px 10px;font-size:12px}.nav-link .icon{display:none}.main{padding:19px 14px 35px}.topbar{margin-bottom:17px}.topbar h1{font-size:22px}.today{font-size:11px}.welcome{padding:20px;border-radius:16px}.welcome h2{font-size:21px}.welcome-art{width:62px;height:62px;border-radius:20px;font-size:30px}.stats{gap:8px}.stat{padding:12px;display:block}.stat-icon{width:35px;height:35px;margin-bottom:8px}.stat strong{font-size:19px}.stat small{font-size:10px}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.toolbar{align-items:stretch;flex-direction:column}.search{max-width:none}.panel,.card{padding:15px}}
 
 #view-afiliados .columns{grid-template-columns:minmax(0,1fr);max-width:980px;margin:0 auto 20px;gap:14px}
+.brand-mark{width:46px;height:46px;flex:0 0 46px;font-size:25px}
+@media(max-width:680px){.brand-mark{width:38px;height:38px;flex-basis:38px;font-size:22px}}
 #view-afiliados .card{padding:clamp(18px,2.4vw,28px)}
 .field-help{display:block;margin:6px 0 4px;color:#61777b;font-size:12px;line-height:1.5}
 .update-card{padding:0!important;overflow:hidden}
@@ -347,6 +370,19 @@ document.querySelectorAll('form').forEach(form=>{
  };
  type.addEventListener('change',updateDocumentRule);
  updateDocumentRule();
+ number.addEventListener('input',()=>{
+  const code=type.options[type.selectedIndex]?.text.trim().toUpperCase();
+  const numeric=['CC','TI','RC'].includes(code);
+  const cleaned=number.value.replace(numeric?/[^0-9]/g:/[^A-Za-z0-9]/g,'');
+  if(cleaned!==number.value) number.value=cleaned;
+ });
+});
+
+document.querySelectorAll('input[name="telefono"]').forEach(input=>{
+ input.addEventListener('input',()=>{
+  const cleaned=input.value.replace(/[^0-9+() .-]/g,'');
+  if(cleaned!==input.value) input.value=cleaned;
+ });
 });
 
 document.querySelectorAll('input[name^="nombre"],input[name^="apellido"]').forEach(input=>{
