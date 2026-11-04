@@ -428,4 +428,3 @@ if(citaForm){
 document.querySelectorAll('[data-filter]').forEach(input=>input.addEventListener('input',()=>{const id=input.dataset.filter==='affiliates'?'affiliatesTable':'appointmentsTable';const table=document.getElementById(id);if(!table)return;const q=input.value.toLocaleLowerCase('es');table.querySelectorAll('tbody tr').forEach(row=>row.hidden=!row.textContent.toLocaleLowerCase('es').includes(q));}));
 </script></body></html>
 
-
