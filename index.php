@@ -417,9 +417,24 @@ label{font-size:13px;color:#3f5c60;margin:13px 0 6px}input,select{min-height:43p
 .admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
 .admin-card{min-width:0}.admin-card>h2{margin-bottom:3px}.admin-edit{margin:18px 0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#f9fcfa}.admin-edit summary{cursor:pointer;font-weight:700;color:var(--teal-dark)}.admin-edit form{padding-top:9px}.compact-table{min-width:520px;font-size:12px}
 @media(max-width:950px){.admin-grid{grid-template-columns:1fr}}
+:root{--ink:#243b4a;--muted:#6b7c88;--line:#dbe7ed;--paper:#fff;--canvas:#f5fbff;--teal:#087db4;--teal-dark:#075987;--mint:#eaf6fc;--nav:#064d73;--shadow:0 12px 34px rgba(13,74,111,.08)}
+body{background:var(--canvas);color:var(--ink)}
+.sidebar{background:linear-gradient(165deg,#064d73,#075987 62%,#0a668c)}
+.brand-mark{background:#d8eff9;color:var(--teal-dark)}.brand strong{color:#fff}.brand small{color:#c3deea}
+.nav-label{color:#b4d5e4}.nav-link{color:#d7e9f1}.nav-link:hover{background:#ffffff18}.nav-link.active,.nav-link.active:hover{background:#eaf6fc;color:#075987;border-color:#d6eaf4;box-shadow:0 5px 16px #052e4828}
+.side-note{border-color:#4c7f98;color:#d4e8f0}.side-note strong{color:#fff}
+.eyebrow{color:var(--teal)}.topbar h1,.welcome h2,.stat strong{color:var(--ink)}.today{border-color:var(--line);color:#496273}
+.welcome{background:radial-gradient(circle at 92% 15%,#ffffffb8 0 8%,transparent 8.3%),linear-gradient(115deg,#dceff9,#f1f8fc);box-shadow:inset 0 0 0 1px #d5e9f3}.welcome p{color:#5d7482}.welcome-art{color:var(--teal);box-shadow:0 8px 24px #175d7d16}
+.stat-icon{background:var(--mint);color:var(--teal-dark)}.panel h2,.card h2,.panel-head h2{color:#23475d}
+label{color:#496273}input,select{border-color:#d5e2e9}input:hover,select:hover{border-color:#9dc8dc}input:focus,select:focus{border-color:#1686b7;box-shadow:0 0 0 4px #d9f1fb}input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline-color:#63b8dc}
+.button{box-shadow:0 3px 8px #07598718}.button.light{color:var(--teal-dark);border-color:#cfe2eb}.button.muted{background:#e8f1f6;color:#31566c}
+.notice{border-color:#c7e2ef;background:#edf8fd;color:#24566e}.notice.error{border-color:#f1d0c8;background:#fff2ef;color:#7c3028}
+th{background:#f0f7fb;color:#496273}tbody tr:hover{background:#f4faff}.empty{background:#f7fbfe}.admin-edit{background:#f8fcfe}.admin-edit summary{color:var(--teal-dark)}
+.update-card summary::after{background:#eaf6fc;color:var(--teal-dark)}
+@media(max-width:680px){.sidebar{background:linear-gradient(165deg,#064d73,#075987)}}
 </style></head><body>
 <div class="shell">
-<aside class="sidebar"><div class="brand"><div class="brand-mark">+</div><div><strong>EPS VILLAVICENCIO</strong><small>Agenda médica</small></div></div><div><div class="nav-label">Menú principal</div><nav class="nav-list"><button class="nav-link active" data-view="inicio"><span class="icon">⌂</span>Resumen</button><button class="nav-link" data-view="afiliados"><span class="icon">♙</span>Afiliados</button><button class="nav-link" data-view="gestion"><span class="icon">⚙</span>Médicos y salas</button><button class="nav-link" data-view="agendar"><span class="icon">＋</span>Agendar cita</button><button class="nav-link" data-view="citas"><span class="icon">▦</span>Citas</button></nav></div><div class="side-note"><strong>Atención organizada</strong>Consulta la agenda y administra las citas desde un solo lugar.</div></aside>
+<aside class="sidebar"><div class="brand"><div class="brand-mark">+</div><div><strong>EPS VILLAVICENCIO</strong><small>Administración</small></div></div><div><div class="nav-label">Menú principal</div><nav class="nav-list"><button class="nav-link active" data-view="inicio"><span class="icon">⌂</span>Resumen</button><button class="nav-link" data-view="afiliados"><span class="icon">♙</span>Afiliados</button><button class="nav-link" data-view="gestion"><span class="icon">⚙</span>Médicos y salas</button><button class="nav-link" data-view="agendar"><span class="icon">＋</span>Agendar cita</button><button class="nav-link" data-view="citas"><span class="icon">▦</span>Citas</button></nav></div><div class="side-note"><strong>Atención organizada</strong>Consulta la agenda y administra las citas desde un solo lugar.</div></aside>
 <main class="main"><header class="topbar"><div><div class="eyebrow">Sistema de atención</div><h1 id="pageTitle">Resumen general</h1></div><div style="display:flex;align-items:center;gap:10px"><div class="today" id="todayLabel"></div><?php if($publicPassword!==''): ?><a class="button light small" href="/?salir=1">Cerrar sesión</a><?php endif ?></div></header>
 <?php if($mensaje): ?><div class="notice">✓ &nbsp;<?=h($mensaje)?></div><?php endif ?><?php if($error): ?><div class="notice error">! &nbsp;<?=h($error)?></div><?php endif ?>
 <section class="view active" id="view-inicio"><div class="welcome"><div><div class="eyebrow">Bienvenido al sistema</div><h2>Tu agenda médica,<br>más clara y organizada.</h2><p>Administra afiliados y reserva citas en pocos pasos.</p><div class="form-actions"><button class="button" data-go="agendar">＋ Agendar una cita</button><button class="button light" data-go="afiliados">Ver afiliados</button></div></div><div class="welcome-art">🩺</div></div>
@@ -584,4 +599,5 @@ if(citaForm){
 }
 document.querySelectorAll('[data-filter]').forEach(input=>input.addEventListener('input',()=>{const id=input.dataset.filter==='affiliates'?'affiliatesTable':'appointmentsTable';const table=document.getElementById(id);if(!table)return;const q=input.value.toLocaleLowerCase('es');table.querySelectorAll('tbody tr').forEach(row=>row.hidden=!row.textContent.toLocaleLowerCase('es').includes(q));}));
 </script></body></html>
+
 
