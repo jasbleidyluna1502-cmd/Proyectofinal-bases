@@ -404,4 +404,3 @@ ORDER BY 1, tipo;
     EXCLUDE USING gist (id_medico WITH =,
                         tsrange(fecha + hora_inicio, fecha + hora_fin) WITH &&);
 
-
