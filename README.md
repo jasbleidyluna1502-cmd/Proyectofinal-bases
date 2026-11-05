@@ -16,9 +16,9 @@ Sistema de reserva de citas médicas desarrollado con PHP y PostgreSQL, sin fram
 4. Configure `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`, o use `DATABASE_URL`. Por defecto, la aplicación usa `eps_app`; `DB_PASSWORD` debe coincidir con la clave definida en el paso anterior.
 5. Desde esta carpeta, inicie PHP: `php -S 127.0.0.1:8000`. Abra `http://127.0.0.1:8000`.
 
-El acceso de administración usa `APP_ACCESS_PASSWORD`. Defínela como variable de entorno antes de iniciar PHP para que funcione el botón **Administración**. La portada y la reserva de pacientes son públicas; las herramientas internas requieren la clave.
+El inicio tiene un solo formulario. Un afiliado entra con tipo de documento, número y nombre completo. La administración se reconoce con `APP_ADMIN_TIPO_DOC`, `APP_ADMIN_DOCUMENTO` y `APP_ADMIN_NOMBRE`, y además exige `APP_ACCESS_PASSWORD`. Configura esas cuatro variables en el entorno local o en Render; no guardes datos personales ni claves en GitHub.
 
-Para cargar las claves localmente sin mostrarlas en pantalla, en Bash puede usar `export DB_USER=eps_app; read -s -p "Clave de PostgreSQL: " DB_PASSWORD; export DB_PASSWORD; echo; read -s -p "Clave de administración: " APP_ACCESS_PASSWORD; export APP_ACCESS_PASSWORD; echo` antes de iniciar PHP.
+Para cargar las claves localmente sin mostrarlas en pantalla, en Bash puede usar `export DB_USER=eps_app; read -s -p "Clave de PostgreSQL: " DB_PASSWORD; export DB_PASSWORD; echo; read -s -p "Clave administrativa: " APP_ACCESS_PASSWORD; export APP_ACCESS_PASSWORD; echo; export APP_ADMIN_TIPO_DOC=CC; read -r -p "Documento del administrador: " APP_ADMIN_DOCUMENTO; export APP_ADMIN_DOCUMENTO; read -r -p "Nombre del administrador: " APP_ADMIN_NOMBRE; export APP_ADMIN_NOMBRE` antes de iniciar PHP.
 
 ## Módulos
 
