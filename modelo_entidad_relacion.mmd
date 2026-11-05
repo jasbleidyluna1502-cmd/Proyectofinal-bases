@@ -1,0 +1,84 @@
+erDiagram
+  TIPO_DOCUMENTO ||--o{ AFILIADO : identifica
+  TIPO_DOCUMENTO ||--o{ MEDICO : identifica
+  TARIFA ||--o{ AFILIADO : asigna
+  AFILIADO ||--|| HISTORIAL : tiene
+  ESTADO ||--o{ CONSULTORIO : clasifica
+  ESTADO ||--o{ HORARIO : clasifica
+  ESTADO ||--o{ CITA : clasifica
+  ESPECIALIDAD ||--o{ MEDICO : ejerce
+  CONSULTORIO ||--o{ MEDICO : asigna
+  CONSULTORIO ||--o{ CONSULTORIO_ESPECIALIDAD : ofrece
+  ESPECIALIDAD ||--o{ CONSULTORIO_ESPECIALIDAD : disponible_en
+  MEDICO ||--o{ HORARIO : agenda
+  AFILIADO ||--o{ CITA : solicita
+  SERVICIO ||--o{ CITA : corresponde
+  HORARIO ||--o| CITA : reserva
+
+  TIPO_DOCUMENTO {
+    int id_tipo_doc PK
+    varchar sigla
+    varchar nombre
+  }
+  ESTADO {
+    int id_estado PK
+    varchar nombre
+    varchar ambito
+  }
+  TARIFA {
+    int id_tarifa PK
+    varchar nombre
+    numeric ingreso_min
+    numeric ingreso_max
+    numeric porcentaje_cobro
+  }
+  AFILIADO {
+    int id_afiliado PK
+    int id_tipo_doc FK
+    varchar num_doc
+    int id_tarifa FK
+    date fecha_nacimiento
+  }
+  HISTORIAL {
+    int id_historial PK
+    int id_afiliado FK
+    text alergias
+  }
+  SERVICIO {
+    int id_servicio PK
+    varchar nombre
+    numeric costo_base
+  }
+  ESPECIALIDAD {
+    int id_especialidad PK
+    varchar nombre
+  }
+  CONSULTORIO {
+    int id_consultorio PK
+    int id_estado FK
+    varchar nombre
+  }
+  CONSULTORIO_ESPECIALIDAD {
+    int id_consultorio PK, FK
+    int id_especialidad PK, FK
+  }
+  MEDICO {
+    int id_medico PK
+    int id_tipo_doc FK
+    int id_especialidad FK
+    int id_consultorio FK
+  }
+  HORARIO {
+    int id_horario PK
+    int id_medico FK
+    date fecha
+    int id_estado FK
+  }
+  CITA {
+    int id_cita PK
+    int id_afiliado FK
+    int id_servicio FK
+    int id_horario FK, UK
+    int id_estado FK
+    numeric valor_cobrado
+  }
