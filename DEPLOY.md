@@ -4,7 +4,7 @@ Esta configuración está preparada para Render. Necesitas una cuenta de Render 
 
 1. Sube el contenido completo de esta carpeta a un repositorio GitHub.
 2. En Render, crea un **Blueprint** y conecta ese repositorio. Render leerá `render.yaml`, creará el servicio PHP y PostgreSQL e importará `proyecto.sql` al iniciar por primera vez.
-3. Cuando termine el despliegue, abre el servicio `eps-villavicencio` en Render y usa su URL `onrender.com`. La portada y la reserva de pacientes son públicas. La clave administrativa generada aparece en **Environment** como `APP_ACCESS_PASSWORD`; compártela solo con el personal que gestionará el sistema.
+3. Cuando termine el despliegue, abre el servicio `eps-villavicencio` en Render y usa su URL `onrender.com`. El único formulario de ingreso valida afiliados por tipo de documento, número y nombre completo. Para administración, configura en **Environment** `APP_ADMIN_TIPO_DOC`, `APP_ADMIN_DOCUMENTO` y `APP_ADMIN_NOMBRE`; `APP_ACCESS_PASSWORD` sigue siendo la clave adicional del hospital. No guardes esos valores en GitHub.
 
 La base incluye afiliados e historiales de ejemplo. No cargues información médica real en esta instancia pública.
 
