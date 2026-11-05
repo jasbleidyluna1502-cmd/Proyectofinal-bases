@@ -12,27 +12,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !hash_equals($_SESSION['csrf_token'
     exit('La sesión del formulario venció. Recarga la página e inténtalo de nuevo.');
 }
 $publicPassword = getenv('APP_ACCESS_PASSWORD') ?: '';
-if (isset($_GET['salir'])) {
-    unset($_SESSION['eps_admin']);
-    header('Location: /');
-    exit;
-}
 $adminRoute = isset($_GET['admin']);
-if ($adminRoute && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'login') {
-    if ($publicPassword !== '' && hash_equals($publicPassword, (string)($_POST['clave'] ?? ''))) {
-        session_regenerate_id(true);
-        $_SESSION['eps_admin'] = true;
-        header('Location: /?admin=1');
-        exit;
-    }
-    $loginError = $publicPassword === '' ? 'La clave administrativa no está configurada en el servidor.' : 'La clave no coincide. Intenta de nuevo.';
-}
-if ($adminRoute && empty($_SESSION['eps_admin'])) {
-    http_response_code(200);
-    ?>
-    <!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administración | EPS Villavicencio</title>
-    <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f7f4;color:#233746;font:16px system-ui,Arial}.login{width:min(400px,calc(100% - 36px));background:white;border:1px solid #e1e9e5;border-radius:20px;padding:30px;box-shadow:0 18px 50px #173b4015}.mark{width:46px;height:46px;border-radius:15px;background:#e6f3ef;color:#187d78;display:grid;place-items:center;font-size:27px;font-weight:700}.login h1{font-size:22px;margin:18px 0 5px}.login p{color:#71828c;margin:0 0 20px;font-size:14px}label{display:block;font-weight:650;font-size:13px;margin:8px 0}input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #d9e2df;border-radius:9px;font:inherit}.login button{margin-top:14px;width:100%;border:0;border-radius:9px;padding:12px;background:#187d78;color:white;font:600 15px system-ui;cursor:pointer}.error{color:#a8483e;font-size:13px;margin-top:10px}.back{display:inline-block;margin-top:18px;color:#187d78}</style></head><body><main class="login"><div class="mark">+</div><h1>Administración</h1><p>EPS Villavicencio · Ingresa la clave del hospital para gestionar afiliados, médicos y citas.</p><form method="post"><input type="hidden" name="accion" value="login"><?=csrfField()?><label for="clave">Clave administrativa</label><input id="clave" name="clave" type="password" required autofocus><button>Entrar</button></form><?php if (!empty($loginError)): ?><div class="error"><?=htmlspecialchars($loginError, ENT_QUOTES, 'UTF-8')?></div><?php endif ?><a class="back" href="/">Volver al inicio</a></main></body></html>
-    <?php
+if (isset($_GET['salir'])) {
+    unset($_SESSION['eps_admin'], $_SESSION['public_afiliado_id']);
+    session_regenerate_id(true);
+    header('Location: /');
     exit;
 }
 try {
@@ -43,7 +27,65 @@ try {
     exit('No se pudo conectar con PostgreSQL. Revise config.php y que el servidor esté activo.');
 }
 function h($value): string { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
-if (!$adminRoute) {
+function nombreNormalizado(string $nombre): string {
+    $nombre = preg_replace('/\s+/u', ' ', trim($nombre)) ?? trim($nombre);
+    if (function_exists('iconv')) $nombre = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $nombre) ?: $nombre;
+    return function_exists('mb_strtolower') ? mb_strtolower($nombre, 'UTF-8') : strtolower($nombre);
+}
+$loginError = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'login_unificado') {
+    $tipoLogin = filter_var($_POST['id_tipo_doc'] ?? null, FILTER_VALIDATE_INT);
+    $documentoLogin = trim($_POST['num_doc'] ?? '');
+    $nombreLogin = trim($_POST['nombre_completo'] ?? '');
+    $claveLogin = (string)($_POST['clave'] ?? '');
+    $stmtTipoLogin = $pdo->prepare('SELECT sigla FROM tipo_documento WHERE id_tipo_doc=?');
+    $stmtTipoLogin->execute([$tipoLogin ?: 0]);
+    $siglaLogin = $stmtTipoLogin->fetchColumn();
+    $adminDocumento = trim(getenv('APP_ADMIN_DOCUMENTO') ?: '');
+    $adminTipo = strtoupper(trim(getenv('APP_ADMIN_TIPO_DOC') ?: ''));
+    $adminNombre = getenv('APP_ADMIN_NOMBRE') ?: '';
+    $esAdministrador = $siglaLogin && $adminTipo !== '' && $adminDocumento !== '' && $adminNombre !== ''
+        && strtoupper((string)$siglaLogin) === $adminTipo
+        && hash_equals($adminDocumento, $documentoLogin)
+        && nombreNormalizado($adminNombre) === nombreNormalizado($nombreLogin);
+    if ($esAdministrador) {
+        if ($publicPassword !== '' && hash_equals($publicPassword, $claveLogin)) {
+            session_regenerate_id(true);
+            unset($_SESSION['public_afiliado_id']);
+            $_SESSION['eps_admin'] = true;
+            header('Location: /?admin=1');
+            exit;
+        }
+        $loginError = $publicPassword === '' ? 'La clave de administración no está configurada.' : 'La clave del hospital no coincide.';
+    } else {
+        $stmtAfiliadoLogin = $pdo->prepare("SELECT id_afiliado,concat_ws(' ',NULLIF(trim(nombre1),''),NULLIF(trim(nombre2),''),NULLIF(trim(apellido1),''),NULLIF(trim(apellido2),'')) AS nombre_completo FROM afiliado WHERE id_tipo_doc=? AND num_doc=?");
+        $stmtAfiliadoLogin->execute([$tipoLogin ?: 0,$documentoLogin]);
+        $afiliadoLogin = $stmtAfiliadoLogin->fetch();
+        if ($afiliadoLogin && nombreNormalizado((string)$afiliadoLogin['nombre_completo']) === nombreNormalizado($nombreLogin)) {
+            session_regenerate_id(true);
+            unset($_SESSION['eps_admin']);
+            $_SESSION['public_afiliado_id'] = (int)$afiliadoLogin['id_afiliado'];
+            header('Location: /?reservar=1');
+            exit;
+        }
+        $loginError = 'No se pudo validar el documento y nombre. Verifica los datos o comunícate con la EPS.';
+    }
+}
+if (empty($_SESSION['eps_admin']) && empty($_SESSION['public_afiliado_id'])) {
+    $tiposLogin = $pdo->query('SELECT id_tipo_doc,sigla,nombre FROM tipo_documento ORDER BY sigla')->fetchAll();
+    ?>
+    <!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ingresar | EPS Villavicencio</title>
+    <style>
+    :root{--blue:#087db4;--blue-dark:#075987;--sky:#eaf6fc;--ink:#243b4a;--muted:#6b7c88;--line:#dbe7ed}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(135deg,#f5fbff,#eaf5fa);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}.page{min-height:100vh;display:grid;place-items:center;padding:30px}.login-layout{width:min(960px,100%);display:grid;grid-template-columns:1fr 1fr;background:#fff;border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 22px 60px #164d6817}.intro{padding:clamp(28px,5vw,58px);background:linear-gradient(145deg,#e9f7fc,#f8fcfe);display:flex;flex-direction:column;justify-content:center}.brand{display:flex;align-items:center;gap:13px;color:var(--blue-dark);font-weight:800;font-size:20px}.brand-mark{width:52px;height:52px;display:grid;place-items:center;border-radius:17px;background:#d8eff9;color:var(--blue);font-size:31px}.intro h1{font-size:clamp(27px,4vw,39px);line-height:1.12;margin:38px 0 12px;letter-spacing:-.035em}.intro p{color:var(--muted);max-width:350px}.pill{margin-top:24px;display:inline-flex;align-items:center;gap:9px;color:var(--blue-dark);font-weight:700}.login-card{padding:clamp(28px,5vw,54px);align-self:center}.login-card h2{font-size:26px;margin:0 0 6px;color:var(--blue-dark)}.help{margin:0 0 20px;color:var(--muted);font-size:14px}label{display:block;margin:14px 0 5px;font-weight:700;font-size:13px}input,select{display:block;width:100%;height:45px;padding:10px 12px;border:1px solid #cbd9e1;border-radius:8px;background:white;color:var(--ink);font:inherit}input:focus,select:focus{outline:3px solid #d9f1fb;border-color:var(--blue)}.button{width:100%;height:46px;margin-top:22px;border:0;border-radius:99px;background:var(--blue);color:#fff;font:inherit;font-weight:750;cursor:pointer}.button:hover{background:var(--blue-dark)}.error{margin-top:14px;padding:11px 13px;border-radius:9px;background:#fff0ef;color:#923c34;font-size:13px}.security{margin-top:18px;color:var(--muted);font-size:12px}.bottom{margin-top:24px;color:var(--muted);font-size:12px}@media(max-width:700px){.page{padding:15px}.login-layout{grid-template-columns:1fr}.intro{padding:24px 25px 18px}.intro h1{font-size:27px;margin:23px 0 5px}.intro p{margin:0}.pill{margin-top:13px}.login-card{padding:22px 25px 28px}}
+    </style></head><body><main class="page"><div class="login-layout"><section class="intro"><div class="brand"><span class="brand-mark">+</span><span>EPS VILLAVICENCIO</span></div><h1>Tu salud, más cerca.</h1><p>Ingresa para solicitar una cita médica o acceder a la gestión de la EPS.</p><div class="pill">✚ &nbsp;Agenda médica en línea</div></section><section class="login-card"><h2>Iniciar sesión</h2><p class="help">Ingresa tu tipo y número de documento y tu nombre completo.</p><form method="post" action="/"><input type="hidden" name="accion" value="login_unificado"><?=csrfField()?><label for="tipoDocumento">Tipo de documento</label><select id="tipoDocumento" name="id_tipo_doc" required><?php foreach($tiposLogin as $tipo): ?><option value="<?=h($tipo['id_tipo_doc'])?>"><?=h($tipo['sigla'].' · '.$tipo['nombre'])?></option><?php endforeach ?></select><label for="numeroDocumento">Número de documento</label><input id="numeroDocumento" name="num_doc" required maxlength="20" autocomplete="username"><label for="nombreCompleto">Nombre completo</label><input id="nombreCompleto" name="nombre_completo" required maxlength="200" autocomplete="name"><label for="claveHospital">Clave del hospital <span style="font-weight:400;color:var(--muted)">(solo administración)</span></label><input id="claveHospital" name="clave" type="password" autocomplete="current-password"><button class="button">Continuar</button></form><?php if($loginError): ?><div class="error"><?=h($loginError)?></div><?php endif ?><p class="security">Los afiliados dejan la clave vacía. El acceso administrativo requiere la identidad autorizada y la clave del hospital.</p><div class="bottom">EPS Villavicencio · Portal de citas</div></section></div></main></body></html>
+    <?php
+    exit;
+}
+if (!empty($_SESSION['eps_admin']) && !$adminRoute) {
+    header('Location: /?admin=1');
+    exit;
+}
+if (empty($_SESSION['eps_admin'])) {
     require __DIR__ . '/public.php';
     exit;
 }
@@ -378,7 +420,7 @@ label{font-size:13px;color:#3f5c60;margin:13px 0 6px}input,select{min-height:43p
 </style></head><body>
 <div class="shell">
 <aside class="sidebar"><div class="brand"><div class="brand-mark">+</div><div><strong>EPS VILLAVICENCIO</strong><small>Agenda médica</small></div></div><div><div class="nav-label">Menú principal</div><nav class="nav-list"><button class="nav-link active" data-view="inicio"><span class="icon">⌂</span>Resumen</button><button class="nav-link" data-view="afiliados"><span class="icon">♙</span>Afiliados</button><button class="nav-link" data-view="gestion"><span class="icon">⚙</span>Médicos y salas</button><button class="nav-link" data-view="agendar"><span class="icon">＋</span>Agendar cita</button><button class="nav-link" data-view="citas"><span class="icon">▦</span>Citas</button></nav></div><div class="side-note"><strong>Atención organizada</strong>Consulta la agenda y administra las citas desde un solo lugar.</div></aside>
-<main class="main"><header class="topbar"><div><div class="eyebrow">Sistema de atención</div><h1 id="pageTitle">Resumen general</h1></div><div style="display:flex;align-items:center;gap:10px"><div class="today" id="todayLabel"></div><?php if($publicPassword!==''): ?><a class="button light small" href="?salir=1">Salir</a><?php endif ?></div></header>
+<main class="main"><header class="topbar"><div><div class="eyebrow">Sistema de atención</div><h1 id="pageTitle">Resumen general</h1></div><div style="display:flex;align-items:center;gap:10px"><div class="today" id="todayLabel"></div><?php if($publicPassword!==''): ?><a class="button light small" href="/?salir=1">Cerrar sesión</a><?php endif ?></div></header>
 <?php if($mensaje): ?><div class="notice">✓ &nbsp;<?=h($mensaje)?></div><?php endif ?><?php if($error): ?><div class="notice error">! &nbsp;<?=h($error)?></div><?php endif ?>
 <section class="view active" id="view-inicio"><div class="welcome"><div><div class="eyebrow">Bienvenido al sistema</div><h2>Tu agenda médica,<br>más clara y organizada.</h2><p>Administra afiliados y reserva citas en pocos pasos.</p><div class="form-actions"><button class="button" data-go="agendar">＋ Agendar una cita</button><button class="button light" data-go="afiliados">Ver afiliados</button></div></div><div class="welcome-art">🩺</div></div>
 <div class="stats"><div class="stat"><div class="stat-icon">♙</div><div><small>Afiliados registrados</small><strong><?=count($afiliados)?></strong></div></div><div class="stat"><div class="stat-icon">▦</div><div><small>Citas en el sistema</small><strong><?=count($citas)?></strong></div></div><div class="stat"><div class="stat-icon">◷</div><div><small>Horarios disponibles</small><strong><?=count($horarios)?></strong></div></div></div>
@@ -463,7 +505,6 @@ Object.entries(loaderConfig).forEach(([action,config])=>document.querySelectorAl
  form.addEventListener('submit',event=>{if(form.dataset.loadedId!==idInput.value){event.preventDefault();status.textContent='Carga los datos del ID antes de guardar.';}});
  lookup.addEventListener('click',load);idInput.addEventListener('change',load);idInput.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();load();}});
 }));
-const publicLink=document.createElement('a');publicLink.className='button light small';publicLink.href='/';publicLink.textContent='Portal de pacientes';document.querySelector('.topbar > div:last-child')?.prepend(publicLink);
 const citaDialog=document.getElementById('citaUpdateDialog');
 const citaToolbar=document.querySelector('#view-citas .toolbar > div');
 if(citaDialog&&citaToolbar){const openButton=document.createElement('button');openButton.type='button';openButton.className='button light small';openButton.textContent='Actualizar cita por ID';citaToolbar.append(openButton);openButton.addEventListener('click',()=>citaDialog.showModal());}
