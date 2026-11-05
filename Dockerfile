@@ -6,7 +6,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /var/www/html
-COPY index.php config.php /var/www/html/
+COPY index.php config.php Database.php public.php /var/www/html/
 COPY proyecto.sql /opt/proyecto.sql
 COPY entrypoint.sh /usr/local/bin/eps-entrypoint
 RUN chmod +x /usr/local/bin/eps-entrypoint
