@@ -12,45 +12,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !hash_equals($_SESSION['csrf_token'
     exit('La sesión del formulario venció. Recarga la página e inténtalo de nuevo.');
 }
 $publicPassword = getenv('APP_ACCESS_PASSWORD') ?: '';
-if ($publicPassword !== '') {
-    if (isset($_GET['salir'])) {
-        $_SESSION = [];
-        session_destroy();
-        header('Location: /');
-        exit;
-    }
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'login') {
-        if (hash_equals($publicPassword, (string)($_POST['clave'] ?? ''))) {
-            session_regenerate_id(true);
-            $_SESSION['eps_login'] = true;
-            header('Location: /');
-            exit;
-        }
-        $loginError = 'La clave no coincide. Intenta de nuevo.';
-    }
-    if (empty($_SESSION['eps_login'])) {
-        http_response_code(200);
-        ?>
-        <!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ingreso | EPS Villavicencio</title>
-        <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f7f4;color:#233746;font:16px system-ui,Arial}.login{width:min(380px,calc(100% - 36px));background:white;border:1px solid #e1e9e5;border-radius:20px;padding:30px;box-shadow:0 18px 50px #173b4015}.mark{width:46px;height:46px;border-radius:15px;background:#e6f3ef;color:#187d78;display:grid;place-items:center;font-size:27px;font-weight:700}.login h1{font-size:22px;margin:18px 0 5px}.login p{color:#71828c;margin:0 0 20px;font-size:14px}label{display:block;font-weight:650;font-size:13px;margin:8px 0}input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #d9e2df;border-radius:9px;font:inherit}.login button{margin-top:14px;width:100%;border:0;border-radius:9px;padding:12px;background:#187d78;color:white;font:600 15px system-ui;cursor:pointer}.error{color:#a8483e;font-size:13px;margin-top:10px}
-</style></head><body><main class="login"><div class="mark">+</div><h1>Agenda médica</h1><p>EPS Villavicencio · Ingresa la clave de acceso compartida.</p><form method="post"><input type="hidden" name="accion" value="login"><?=csrfField()?><label for="clave">Clave de acceso</label><input id="clave" name="clave" type="password" required autofocus><button>Entrar</button></form><?php if (!empty($loginError)): ?><div class="error"><?=htmlspecialchars($loginError, ENT_QUOTES, 'UTF-8')?></div><?php endif ?></main></body></html>
-        <?php
-        exit;
-    }
+if (isset($_GET['salir'])) {
+    unset($_SESSION['eps_admin']);
+    header('Location: /');
+    exit;
 }
-$config = require __DIR__ . '/config.php';
-$dsn = $config['dsn'] ?? "pgsql:host={$config['host']};port={$config['port']};dbname={$config['dbname']}";
+$adminRoute = isset($_GET['admin']);
+if ($adminRoute && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'login') {
+    if ($publicPassword !== '' && hash_equals($publicPassword, (string)($_POST['clave'] ?? ''))) {
+        session_regenerate_id(true);
+        $_SESSION['eps_admin'] = true;
+        header('Location: /?admin=1');
+        exit;
+    }
+    $loginError = $publicPassword === '' ? 'La clave administrativa no está configurada en el servidor.' : 'La clave no coincide. Intenta de nuevo.';
+}
+if ($adminRoute && empty($_SESSION['eps_admin'])) {
+    http_response_code(200);
+    ?>
+    <!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administración | EPS Villavicencio</title>
+    <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f7f4;color:#233746;font:16px system-ui,Arial}.login{width:min(400px,calc(100% - 36px));background:white;border:1px solid #e1e9e5;border-radius:20px;padding:30px;box-shadow:0 18px 50px #173b4015}.mark{width:46px;height:46px;border-radius:15px;background:#e6f3ef;color:#187d78;display:grid;place-items:center;font-size:27px;font-weight:700}.login h1{font-size:22px;margin:18px 0 5px}.login p{color:#71828c;margin:0 0 20px;font-size:14px}label{display:block;font-weight:650;font-size:13px;margin:8px 0}input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #d9e2df;border-radius:9px;font:inherit}.login button{margin-top:14px;width:100%;border:0;border-radius:9px;padding:12px;background:#187d78;color:white;font:600 15px system-ui;cursor:pointer}.error{color:#a8483e;font-size:13px;margin-top:10px}.back{display:inline-block;margin-top:18px;color:#187d78}</style></head><body><main class="login"><div class="mark">+</div><h1>Administración</h1><p>EPS Villavicencio · Ingresa la clave del hospital para gestionar afiliados, médicos y citas.</p><form method="post"><input type="hidden" name="accion" value="login"><?=csrfField()?><label for="clave">Clave administrativa</label><input id="clave" name="clave" type="password" required autofocus><button>Entrar</button></form><?php if (!empty($loginError)): ?><div class="error"><?=htmlspecialchars($loginError, ENT_QUOTES, 'UTF-8')?></div><?php endif ?><a class="back" href="/">Volver al inicio</a></main></body></html>
+    <?php
+    exit;
+}
 try {
-    $pdo = new PDO(
-        $dsn,
-        $config['user'], $config['password'],
-        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
-    );
+    require_once __DIR__ . '/Database.php';
+    $pdo = Database::getInstance();
 } catch (PDOException $e) {
     http_response_code(500);
     exit('No se pudo conectar con PostgreSQL. Revise config.php y que el servidor esté activo.');
 }
 function h($value): string { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
+if (!$adminRoute) {
+    require __DIR__ . '/public.php';
+    exit;
+}
+$apiName = $_GET['api'] ?? '';
+if ($apiName !== '') {
+    if (empty($_SESSION['eps_admin'])) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['error' => 'Acceso no autorizado.']);
+        exit;
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    $apiId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
+    $apiQueries = [
+        'afiliado' => 'SELECT id_tipo_doc,num_doc,nombre1,nombre2,apellido1,apellido2,sexo,fecha_nacimiento,telefono,correo,direccion,ingreso_mensual,id_tarifa FROM afiliado WHERE id_afiliado=?',
+        'medico' => 'SELECT id_tipo_doc,num_documento,nombre1,nombre2,apellido1,apellido2,correo,telefono,id_especialidad,id_consultorio FROM medico WHERE id_medico=?',
+        'horario' => "SELECT h.id_medico,h.fecha,to_char(h.hora_inicio,'HH24:MI') AS hora_inicio,to_char(h.hora_fin,'HH24:MI') AS hora_fin,s.nombre AS estado FROM horario h JOIN estado s USING(id_estado) WHERE h.id_horario=?",
+        'cita' => "SELECT c.id_afiliado,c.id_servicio,c.id_horario,e.nombre AS estado,c.valor_cobrado,c.fecha_solicitud,h.fecha,to_char(h.hora_inicio,'HH24:MI') AS hora_inicio,h.id_medico,m.nombre1 || ' ' || m.apellido1 AS nombre_medico FROM cita c JOIN estado e USING(id_estado) JOIN horario h USING(id_horario) JOIN medico m USING(id_medico) WHERE c.id_cita=?",
+    ];
+    if (!isset($apiQueries[$apiName]) || !$apiId) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Solicitud no válida.']);
+        exit;
+    }
+    $stmtApi = $pdo->prepare($apiQueries[$apiName]);
+    $stmtApi->execute([$apiId]);
+    $registroApi = $stmtApi->fetch();
+    if (!$registroApi) {
+        http_response_code(404);
+        echo json_encode(['error' => 'No se encontró un registro con ese ID.']);
+        exit;
+    }
+    echo json_encode($registroApi, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
 $mensaje = '';
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -109,7 +137,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $sql = 'UPDATE afiliado SET id_tipo_doc=:id_tipo_doc,num_doc=:num_doc,nombre1=:nombre1,nombre2=:nombre2,apellido1=:apellido1,apellido2=:apellido2,sexo=:sexo,fecha_nacimiento=:fecha_nacimiento,telefono=:telefono,correo=:correo,direccion=:direccion,ingreso_mensual=:ingreso_mensual,id_tarifa=:id_tarifa WHERE id_afiliado=:id_afiliado';
                 $mensaje = 'Afiliado actualizado.';
             }
-            $pdo->prepare($sql)->execute($datos);
+            $stmtAfiliado = $pdo->prepare($sql);
+            $stmtAfiliado->execute($datos);
+            if ($accion === 'actualizar_afiliado' && $stmtAfiliado->rowCount() === 0) throw new RuntimeException('No se encontró un afiliado con ese ID.');
         } elseif (in_array($accion, ['crear_medico', 'actualizar_medico'], true)) {
             $idMedico = filter_var($_POST['id_medico'] ?? null, FILTER_VALIDATE_INT);
             $tipoMedico = filter_var($_POST['id_tipo_doc'] ?? null, FILTER_VALIDATE_INT);
@@ -189,6 +219,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $horaInicio) || !preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $horaFin) || $horaFin <= $horaInicio) {
                 throw new RuntimeException('La hora final debe ser posterior a la hora inicial.');
             }
+            $zonaBogotaHorario = new DateTimeZone('America/Bogota');
+            $fechaHoraInicioHorario = new DateTimeImmutable($fechaHorario . ' ' . $horaInicio, $zonaBogotaHorario);
+            if ($fechaHoraInicioHorario <= new DateTimeImmutable('now', $zonaBogotaHorario)) throw new RuntimeException('El horario debe comenzar en una fecha y hora futuras.');
             $estadoDisponible = $pdo->query("SELECT id_estado FROM estado WHERE ambito='horario' AND nombre='Disponible'")->fetchColumn();
             if (!$estadoDisponible) throw new RuntimeException('No existe el estado Disponible para horarios.');
             if ($accion === 'crear_horario') {
@@ -228,6 +261,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw $e;
             }
             $mensaje = 'Cita reservada. El valor se calculó automáticamente y el horario quedó ocupado.';
+        } elseif ($accion === 'actualizar_cita') {
+            $idCita = filter_var($_POST['id_cita'] ?? null, FILTER_VALIDATE_INT);
+            $idAfiliadoCita = filter_var($_POST['id_afiliado'] ?? null, FILTER_VALIDATE_INT);
+            $idServicioCita = filter_var($_POST['id_servicio'] ?? null, FILTER_VALIDATE_INT);
+            $nuevoHorarioCita = filter_var($_POST['id_horario'] ?? null, FILTER_VALIDATE_INT);
+            if (!$idCita || !$idAfiliadoCita || !$idServicioCita || !$nuevoHorarioCita) throw new RuntimeException('Carga la cita por su ID y completa afiliado, servicio y horario.');
+            $pdo->beginTransaction();
+            try {
+                $stmtCitaActual = $pdo->prepare("SELECT c.id_horario,e.nombre AS estado FROM cita c JOIN estado e USING(id_estado) WHERE c.id_cita=? FOR UPDATE OF c");
+                $stmtCitaActual->execute([$idCita]);
+                $citaActual = $stmtCitaActual->fetch();
+                if (!$citaActual) throw new RuntimeException('No se encontró una cita con ese ID.');
+                if ($citaActual['estado'] !== 'Programada') throw new RuntimeException('Solo se pueden actualizar citas que siguen programadas.');
+                $horarioAnterior = (int)$citaActual['id_horario'];
+                $stmtHorarioNuevo = $pdo->prepare("SELECT h.fecha,h.hora_inicio,s.nombre AS estado,s.ambito FROM horario h JOIN estado s USING(id_estado) WHERE h.id_horario=? FOR UPDATE OF h");
+                $stmtHorarioNuevo->execute([$nuevoHorarioCita]);
+                $slotNuevo = $stmtHorarioNuevo->fetch();
+                if (!$slotNuevo || $slotNuevo['ambito'] !== 'horario' || ($nuevoHorarioCita !== $horarioAnterior && $slotNuevo['estado'] !== 'Disponible')) {
+                    throw new RuntimeException('El nuevo horario ya no está disponible. Actualiza la página y elige otro.');
+                }
+                $zonaBogota = new DateTimeZone('America/Bogota');
+                $fechaHoraNueva = new DateTimeImmutable($slotNuevo['fecha'] . ' ' . $slotNuevo['hora_inicio'], $zonaBogota);
+                if ($fechaHoraNueva <= new DateTimeImmutable('now', $zonaBogota)) throw new RuntimeException('La cita debe quedar en una fecha y hora futuras.');
+                $stmtActualizarCita = $pdo->prepare('UPDATE cita SET id_afiliado=?,id_servicio=?,id_horario=? WHERE id_cita=?');
+                $stmtActualizarCita->execute([$idAfiliadoCita,$idServicioCita,$nuevoHorarioCita,$idCita]);
+                if ($nuevoHorarioCita !== $horarioAnterior) {
+                    $idDisponible = $pdo->query("SELECT id_estado FROM estado WHERE ambito='horario' AND nombre='Disponible'")->fetchColumn();
+                    $idOcupado = $pdo->query("SELECT id_estado FROM estado WHERE ambito='horario' AND nombre='Ocupado'")->fetchColumn();
+                    if (!$idDisponible || !$idOcupado) throw new RuntimeException('Faltan estados de horario en la base de datos.');
+                    $pdo->prepare('UPDATE horario SET id_estado=? WHERE id_horario=?')->execute([$idDisponible,$horarioAnterior]);
+                    $pdo->prepare('UPDATE horario SET id_estado=? WHERE id_horario=?')->execute([$idOcupado,$nuevoHorarioCita]);
+                }
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                throw $e;
+            }
+            $mensaje = 'Cita actualizada. El identificador se conservó.';
         } elseif ($accion === 'atender_cita') {
             $id = filter_var($_POST['id_cita'] ?? null, FILTER_VALIDATE_INT);
             $pdo->prepare("UPDATE cita SET id_estado=(SELECT id_estado FROM estado WHERE ambito='cita' AND nombre='Atendida') WHERE id_cita=?")->execute([$id]);
@@ -239,7 +310,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } catch (Throwable $e) {
         $error = $e instanceof PDOException
-            ? (($accion ?? '') === 'crear_cita' ? 'No se reservó la cita: el horario dejó de estar disponible. Actualice la página y seleccione otra hora.' : 'No se guardó el cambio. Verifique que el documento no esté repetido y que los registros seleccionados existan.')
+            ? (in_array(($accion ?? ''), ['crear_cita','actualizar_cita'], true) ? 'No se guardó la cita: el horario dejó de estar disponible o alguno de los registros ya no existe. Actualiza la página y revisa la selección.' : 'No se guardó el cambio. Verifique que el documento no esté repetido y que los registros seleccionados existan.')
             : $e->getMessage();
     }
 }
@@ -349,6 +420,7 @@ label{font-size:13px;color:#3f5c60;margin:13px 0 6px}input,select{min-height:43p
 <section class="view" id="view-agendar"><p class="intro">Selecciona afiliado, servicio y una franja disponible. El sistema calcula el valor y ocupa el horario.</p><div class="columns"><div class="card"><h2>Nueva cita</h2><p class="help">Completa los datos para confirmar la reserva.</p><form method="post"><input type="hidden" name="accion" value="crear_cita"><?=csrfField()?><label>Afiliado *</label><select name="id_afiliado" required><?php foreach($afiliados as $x): ?><option value="<?=$x['id_afiliado']?>"><?=h($x['nombre1'].' '.$x['apellido1'].' · '.$x['num_doc'])?></option><?php endforeach ?></select><label>Servicio médico *</label><select name="id_servicio" required><?php foreach($servicios as $x): ?><option value="<?=$x['id_servicio']?>"><?=h($x['nombre'].' · $'.number_format((float)$x['costo_base'],0,',','.'))?></option><?php endforeach ?></select><p class="help">Selecciona primero el médico, después la fecha y por último la hora.</p><label for="medicoHorario">Médico *</label><select id="medicoHorario" required <?=(!$horarios?'disabled':'')?>><option value="">Selecciona un médico</option><?php foreach($medicosHorario as $idMedico => $nombreMedico): ?><option value="<?=h($idMedico)?>"><?=h($nombreMedico)?></option><?php endforeach ?></select><label for="fechaHorario">Fecha *</label><select id="fechaHorario" required disabled><option value="">Selecciona primero un médico</option></select><label for="horaHorario">Hora disponible *</label><select id="horaHorario" required disabled><option value="">Selecciona primero una fecha</option></select><input type="hidden" name="id_horario" id="idHorarioSeleccionado"><?php if(!$horarios): ?><p class="help">No hay horarios disponibles. Agrega horarios desde los datos de la base de datos.</p><?php endif ?><div class="form-actions"><button class="button" <?=(!$horarios||!$afiliados||!$servicios)?'disabled':''?>>Confirmar cita</button><button class="button light" type="reset">Limpiar</button></div></form></div><div class="card"><h2>Horarios disponibles</h2><p class="help">Franjas futuras habilitadas para reservar.</p><?php if(!$horarios): ?><div class="empty">No hay horarios disponibles por ahora.</div><?php else: ?><div class="table-wrap"><table><thead><tr><th>Fecha y hora</th><th>Médico</th><th>Especialidad</th></tr></thead><tbody><?php foreach(array_slice($horarios,0,12) as $x): ?><tr><td><?=h($x['fecha'].' · '.substr((string)$x['hora_inicio'],0,5))?></td><td><?=h($x['medico'])?></td><td><?=h($x['especialidad'])?></td></tr><?php endforeach ?></tbody></table></div><?php endif ?></div></div></section>
 <section class="view" id="view-citas"><p class="intro">Consulta las reservas, marca las atenciones realizadas o elimina una cita para liberar el horario.</p><div class="panel"><div class="toolbar"><div><h2>Agenda de citas</h2><p class="help">Citas registradas y su estado actual</p></div><input class="search" type="search" placeholder="Buscar afiliado, servicio o médico…" data-filter="appointments"></div><?php if(!$citas): ?><div class="empty">Todavía no hay citas registradas.</div><?php else: ?><div class="table-wrap"><table id="appointmentsTable"><thead><tr><th>ID</th><th>Afiliado</th><th>Servicio</th><th>Fecha y hora</th><th>Médico</th><th>Valor</th><th>Estado</th><th>Acciones</th></tr></thead><tbody><?php foreach($citas as $x): ?><tr><td><?=h($x['id_cita'])?></td><td class="person"><?=h($x['afiliado'])?></td><td><?=h($x['servicio'])?></td><td><?=h($x['fecha'].' · '.substr((string)$x['hora_inicio'],0,5))?></td><td><?=h($x['medico'])?></td><td>$<?=number_format((float)$x['valor_cobrado'],0,',','.')?></td><td><span class="badge <?=($x['estado']==='Atendida'?'done':'')?>"><?=h($x['estado'])?></span></td><td><?php if($x['estado']==='Programada'): ?><div class="form-actions"><form method="post"><input type="hidden" name="accion" value="atender_cita"><?=csrfField()?><input type="hidden" name="id_cita" value="<?=$x['id_cita']?>"><button class="button muted small">Atendida</button></form><form method="post" onsubmit="return confirm('¿Eliminar esta cita y liberar el horario?')"><input type="hidden" name="accion" value="eliminar_cita"><?=csrfField()?><input type="hidden" name="id_cita" value="<?=$x['id_cita']?>"><button class="button danger small">Eliminar</button></form></div><?php endif ?></td></tr><?php endforeach ?></tbody></table></div><?php endif ?></div></section>
 <div class="footer-note">EPS Villavicencio · Agenda médica</div></main></div>
+<dialog id="citaUpdateDialog" style="border:0;border-radius:16px;padding:24px;width:min(620px,calc(100% - 28px));box-shadow:0 20px 70px #123d3b44"><form id="citaUpdateForm" method="post" action="/?admin=1"><input type="hidden" name="accion" value="actualizar_cita"><?=csrfField()?><input type="hidden" name="id_cita"><h2>Actualizar cita programada</h2><p class="help">Escribe el ID y carga la cita. El identificador se conserva y no se modifica.</p><label for="citaIdLookup">ID de la cita</label><div class="form-actions"><input id="citaIdLookup" type="number" min="1" required><button class="button light" type="button" id="loadCitaRecord">Cargar cita</button></div><p id="citaLoadStatus" class="help" aria-live="polite"></p><div class="form-grid"><div><label>Estado actual</label><input name="estado" readonly></div><div><label>Fecha de solicitud</label><input name="fecha_solicitud" readonly></div><div><label>Valor calculado</label><input name="valor_cobrado" readonly></div><div><label>Fecha actual</label><input name="fecha" readonly></div><div><label>Hora actual</label><input name="hora_inicio" readonly></div><div><label>Médico actual</label><input name="nombre_medico" readonly></div></div><label>Afiliado</label><select name="id_afiliado" required><?php foreach($afiliados as $x): ?><option value="<?=h($x['id_afiliado'])?>"><?=h($x['nombre1'].' '.$x['apellido1'].' · '.$x['num_doc'])?></option><?php endforeach ?></select><label>Servicio</label><select name="id_servicio" required><?php foreach($servicios as $x): ?><option value="<?=h($x['id_servicio'])?>"><?=h($x['nombre'])?></option><?php endforeach ?></select><label>Horario</label><select name="id_horario" required><?php foreach($horarios as $x): ?><option value="<?=h($x['id_horario'])?>"><?=h($x['fecha'].' · '.substr((string)$x['hora_inicio'],0,5).' · '.$x['medico'])?></option><?php endforeach ?></select><div class="form-actions"><button class="button" type="submit" disabled>Guardar cambios</button><button class="button muted" type="button" id="closeCitaDialog">Cerrar</button></div></form></dialog>
 <script>
 const titles={inicio:'Resumen general',afiliados:'Gestión de afiliados',gestion:'Médicos y salas',agendar:'Agendar una cita',citas:'Agenda de citas'};
 function showView(name){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.view===name));document.getElementById('pageTitle').textContent=titles[name]||titles.inicio;history.replaceState(null,'','#'+name);window.scrollTo({top:0,behavior:'smooth'});}
@@ -356,6 +428,50 @@ document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',(
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.go)));
 const initial=location.hash.replace('#','');if(titles[initial])showView(initial);
 const now=new Date();document.getElementById('todayLabel').textContent=new Intl.DateTimeFormat('es-CO',{weekday:'short',day:'numeric',month:'short',year:'numeric'}).format(now);
+const loaderConfig={actualizar_afiliado:{type:'afiliado',id:'id_afiliado'},actualizar_medico:{type:'medico',id:'id_medico'},actualizar_horario:{type:'horario',id:'id_horario'}};
+async function loadAdminRecord(type,id,form,idField,status){
+ if(!id){status.textContent='Escribe un ID válido para buscar.';return false;}
+ status.textContent='Buscando…';
+ const url=new URL(location.href);url.search='';url.hash='';url.searchParams.set('admin','1');url.searchParams.set('api',type);url.searchParams.set('id',id);
+ try{
+  const response=await fetch(url.toString(),{headers:{'Accept':'application/json'}});const data=await response.json();
+  if(!response.ok)throw new Error(data.error||'No se encontró el registro.');
+  Object.entries(data).forEach(([key,value])=>{
+   const field=form.elements.namedItem(key);if(!field||key===idField)return;
+   if(field.tagName==='SELECT'&&key==='id_horario'&&![...field.options].some(option=>option.value===String(value))){field.add(new Option('Horario actual · '+data.fecha+' · '+data.hora_inicio+' · médico '+data.id_medico,String(value)));}
+   field.value=value??'';
+   field.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  if(type==='cita')form.elements.namedItem('id_cita').value=data.id_cita;
+  const submitButton=form.querySelector('button[type="submit"]');
+  const bloqueadaCita=type==='cita'&&data.estado!=='Programada';
+  const bloqueadoHorario=type==='horario'&&data.estado!=='Disponible';
+  if(submitButton)submitButton.disabled=bloqueadaCita||bloqueadoHorario;
+  status.textContent=bloqueadaCita?'La cita se cargó, pero solo se pueden modificar citas programadas.':bloqueadoHorario?'Ese horario no está disponible para actualizar.':'Datos cargados. Revisa el formulario antes de guardar.';
+  return !(bloqueadaCita||bloqueadoHorario);
+ }catch(error){status.textContent=error.message;return false;}
+}
+Object.entries(loaderConfig).forEach(([action,config])=>document.querySelectorAll('form').forEach(form=>{
+ if(form.querySelector('[name="accion"]')?.value!==action)return;
+ const idInput=form.elements.namedItem(config.id);if(!idInput)return;
+ const lookup=document.createElement('button');lookup.type='button';lookup.className='button light small';lookup.textContent='Cargar datos';
+ const status=document.createElement('span');status.className='subtext';status.setAttribute('aria-live','polite');
+ idInput.insertAdjacentElement('afterend',lookup);lookup.insertAdjacentElement('afterend',status);
+ const submitButton=form.querySelector('button[type="submit"]');if(submitButton)submitButton.disabled=true;
+ const load=async()=>{const requestedId=String(idInput.value);const ok=await loadAdminRecord(config.type,requestedId,form,config.id,status);const currentId=String(idInput.value);form.dataset.loadedId=ok&&currentId===requestedId?requestedId:'';if(submitButton)submitButton.disabled=!ok||currentId!==requestedId;};
+ idInput.addEventListener('input',()=>{form.dataset.loadedId='';if(submitButton)submitButton.disabled=true;status.textContent='Carga los datos del ID antes de guardar.';});
+ form.addEventListener('submit',event=>{if(form.dataset.loadedId!==idInput.value){event.preventDefault();status.textContent='Carga los datos del ID antes de guardar.';}});
+ lookup.addEventListener('click',load);idInput.addEventListener('change',load);idInput.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();load();}});
+}));
+const publicLink=document.createElement('a');publicLink.className='button light small';publicLink.href='/';publicLink.textContent='Portal de pacientes';document.querySelector('.topbar > div:last-child')?.prepend(publicLink);
+const citaDialog=document.getElementById('citaUpdateDialog');
+const citaToolbar=document.querySelector('#view-citas .toolbar > div');
+if(citaDialog&&citaToolbar){const openButton=document.createElement('button');openButton.type='button';openButton.className='button light small';openButton.textContent='Actualizar cita por ID';citaToolbar.append(openButton);openButton.addEventListener('click',()=>citaDialog.showModal());}
+document.getElementById('closeCitaDialog')?.addEventListener('click',()=>citaDialog.close());
+document.getElementById('loadCitaRecord')?.addEventListener('click',async()=>{const form=document.getElementById('citaUpdateForm');const lookup=document.getElementById('citaIdLookup');const requestedId=String(lookup.value);const submitButton=form.querySelector('button[type="submit"]');const ok=await loadAdminRecord('cita',requestedId,form,'id_cita',document.getElementById('citaLoadStatus'));const currentId=String(lookup.value);form.dataset.loadedId=ok&&currentId===requestedId?requestedId:'';if(submitButton)submitButton.disabled=!ok||currentId!==requestedId||form.elements.namedItem('estado').value!=='Programada';});
+document.getElementById('citaIdLookup')?.addEventListener('input',()=>{const form=document.getElementById('citaUpdateForm');form.elements.namedItem('id_cita').value='';form.dataset.loadedId='';form.querySelector('button[type="submit"]').disabled=true;document.getElementById('citaLoadStatus').textContent='Carga la cita antes de guardar.';});
+document.getElementById('citaIdLookup')?.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();document.getElementById('loadCitaRecord').click();}});
+document.getElementById('citaUpdateForm')?.addEventListener('submit',event=>{const form=document.getElementById('citaUpdateForm');if(!form.elements.namedItem('id_cita').value||form.dataset.loadedId!==document.getElementById('citaIdLookup').value){event.preventDefault();document.getElementById('citaLoadStatus').textContent='Primero carga la cita por su ID.';}});
 document.querySelectorAll('form').forEach(form=>{
  const type=form.querySelector('[data-document-type]');
  const number=form.querySelector('[data-document-number]');
