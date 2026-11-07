@@ -1,4 +1,4 @@
-# Proyecto Final de Bases de Datos — EPS Villavicencio
+# Proyecto Final de Bases de Datos 
 
 Sistema de reserva de citas médicas desarrollado con PHP y PostgreSQL, sin framework.
 
