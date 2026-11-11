@@ -22,6 +22,7 @@ h2 { margin-bottom: 12px; color: var(--blue-dark); font-size: 1.3rem; font-weigh
 h3 { font-size: 1rem; font-weight: 500; }
 label { display: block; margin: 10px 0 5px; font-size: .9rem; font-weight: 500; }
 input, select, textarea { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid #b6c9d5; border-radius: var(--radius); background: #fff; color: var(--ink); font: inherit; }
+input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, textarea:-webkit-autofill, select:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px #fff inset; -webkit-text-fill-color: var(--ink); caret-color: var(--ink); }
 textarea { min-height: 82px; resize: vertical; }
 input:focus, select:focus, textarea:focus { outline: 2px solid #24688f33; border-color: var(--blue); }
 button { font: inherit; cursor: pointer; }
