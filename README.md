@@ -130,9 +130,140 @@ Los permisos de la interfaz restringen las acciones disponibles para cada perfil
 
 ## Modelo entidad-relación
 
-![Modelo entidad-relación de EPS Villavicencio](assets/modelo_entidad_relacion.png)
+El siguiente diagrama está escrito en Mermaid, así que GitHub lo representa directamente en el README:
 
-El modelo también se describe en [INFORME.md](INFORME.md), que incluye objetivos, justificación, modelo relacional y diccionario de datos.
+```mermaid
+erDiagram
+    ESTADO ||--o{ CONSULTORIO : clasifica
+    ESTADO ||--o{ HORARIO : clasifica
+    ESTADO ||--o{ CITA : clasifica
+
+    USUARIO ||--o| AFILIADO : perfil
+    USUARIO ||--o| MEDICO : perfil
+    TIPO_DOCUMENTO ||--o{ AFILIADO : identifica
+    TIPO_DOCUMENTO ||--o{ MEDICO : identifica
+    TARIFA ||--o{ AFILIADO : determina_copago
+    AFILIADO ||--o| HISTORIAL : tiene
+
+    CONSULTORIO ||--o{ CONSULTORIO_ESPECIALIDAD : habilita
+    ESPECIALIDAD ||--o{ CONSULTORIO_ESPECIALIDAD : disponible_en
+    CONSULTORIO_ESPECIALIDAD ||--o{ MEDICO : asignacion
+
+    SERVICIO ||--o{ SERVICIO_ESPECIALIDAD : requiere
+    ESPECIALIDAD ||--o{ SERVICIO_ESPECIALIDAD : atiende
+    MEDICO ||--o{ HORARIO : programa
+    AFILIADO ||--o{ CITA : reserva
+    SERVICIO ||--o{ CITA : solicita
+    HORARIO ||--o| CITA : ocupa
+    CITA ||--o| RESULTADO_CONSULTA : registra
+    MEDICO ||--o{ RESULTADO_CONSULTA : atiende
+
+    ESTADO {
+        smallint id_estado PK
+        varchar nombre
+        varchar ambito
+    }
+    TIPO_DOCUMENTO {
+        smallint id_tipo_doc PK
+        varchar sigla UK
+        varchar nombre
+    }
+    TARIFA {
+        smallint id_tarifa PK
+        varchar nombre UK
+        numeric ingreso_min
+        numeric ingreso_max
+        numeric porcentaje_cobro
+    }
+    ESPECIALIDAD {
+        smallint id_especialidad PK
+        varchar nombre UK
+        text descripcion
+    }
+    SERVICIO {
+        smallint id_servicio PK
+        varchar nombre UK
+        text descripcion
+        numeric costo_base
+    }
+    SERVICIO_ESPECIALIDAD {
+        smallint id_servicio PK, FK
+        smallint id_especialidad PK, FK
+    }
+    CONSULTORIO {
+        smallint id_consultorio PK
+        varchar nombre UK
+        varchar ubicacion
+        smallint capacidad
+        smallint id_estado FK
+    }
+    CONSULTORIO_ESPECIALIDAD {
+        smallint id_consultorio PK, FK
+        smallint id_especialidad PK, FK
+    }
+    USUARIO {
+        integer id_usuario PK
+        varchar username UK
+        varchar password_hash
+        boolean activo
+    }
+    AFILIADO {
+        integer id_afiliado PK
+        integer id_usuario FK, UK
+        smallint id_tipo_doc FK
+        varchar num_doc
+        varchar nombre1
+        varchar apellido1
+        numeric ingreso_mensual
+        varchar estado_afiliacion
+        smallint id_tarifa FK
+    }
+    MEDICO {
+        integer id_medico PK
+        integer id_usuario FK, UK
+        smallint id_tipo_doc FK
+        varchar num_documento
+        varchar nombre1
+        varchar apellido1
+        smallint id_especialidad FK
+        smallint id_consultorio FK
+    }
+    HISTORIAL {
+        integer id_historial PK
+        integer id_afiliado FK, UK
+        date fecha_apertura
+        text alergias
+        varchar grupo_sanguineo
+        text antecedentes
+        text observaciones
+    }
+    HORARIO {
+        integer id_horario PK
+        integer id_medico FK
+        date fecha
+        time hora_inicio
+        time hora_fin
+        smallint id_estado FK
+    }
+    CITA {
+        integer id_cita PK
+        integer id_afiliado FK
+        smallint id_servicio FK
+        integer id_horario FK, UK
+        timestamp fecha_solicitud
+        smallint id_estado FK
+        numeric valor_cobrado
+    }
+    RESULTADO_CONSULTA {
+        integer id_resultado PK
+        integer id_cita FK, UK
+        integer id_medico FK
+        text resultado
+        timestamp fecha_registro
+    }
+```
+
+La fuente Mermaid completa, con los campos de las entidades, está en [modelo_entidad_relacion.mmd](modelo_entidad_relacion.mmd). El [INFORME.md](INFORME.md) incluye objetivos, justificación, modelo relacional y diccionario de datos.
 
 ## Archivos principales
 
@@ -143,8 +274,7 @@ El modelo también se describe en [INFORME.md](INFORME.md), que incluye objetivo
 | `Database.php` y `config.php` | Gestionan la conexión PHP con PostgreSQL. |
 | `assets/app.css` | Estilos de la interfaz. |
 | `assets/favicon.svg` | Ícono de la pestaña del navegador. |
-| `assets/ilustracion-familia.png` | Ilustración de la página de ingreso. |
-| `assets/modelo_entidad_relacion.png` | Imagen del modelo entidad-relación. |
+| `modelo_entidad_relacion.mmd` | Diagrama entidad-relación en formato Mermaid. |
 | `INFORME.md` | Informe académico, modelo relacional y diccionario de datos. |
 
 > Las claves incluidas son únicamente para datos locales de demostración. Cámbialas antes de usar el sistema con información real y no publiques datos personales.
